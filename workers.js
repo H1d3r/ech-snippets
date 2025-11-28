@@ -1,21 +1,21 @@
+import { connect } from 'cloudflare:sockets';
+
 const WS_READY_STATE_OPEN = 1;
 const WS_READY_STATE_CLOSING = 2;
-const CF_FALLBACK_IPS = ['[2a00:1098:2b::1:6815:5881]'];
+const CF_FALLBACK_IPS = ['tw.william.us.ci'];
 
 // 复用 TextEncoder，避免重复创建
 const encoder = new TextEncoder();
 
-import { connect } from 'cloudflare:sockets';
-
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request) {
     try {
       const token = '';
       const upgradeHeader = request.headers.get('Upgrade');
       
       if (!upgradeHeader || upgradeHeader.toLowerCase() !== 'websocket') {
         return new URL(request.url).pathname === '/' 
-          ? new Response('WebSocket Proxy Server', { status: 200 })
+          ? new Response('Hellow World', { status: 200 })
           : new Response('Expected WebSocket', { status: 426 });
       }
 
@@ -23,7 +23,8 @@ export default {
         return new Response('Unauthorized', { status: 401 });
       }
 
-      const [client, server] = Object.values(new WebSocketPair());
+      const webSocketPair = new WebSocketPair();
+      const [client, server] = Object.values(webSocketPair);
       server.accept();
       
       handleSession(server).catch(() => safeCloseWebSocket(server));
