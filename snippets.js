@@ -18,17 +18,14 @@ export default {
           ? new Response('Hello World', { status: 200 })
           : new Response('Expected WebSocket', { status: 426 });
       }
-
       if (token && request.headers.get('Sec-WebSocket-Protocol') !== token) {
         return new Response('Unauthorized', { status: 401 });
       }
-
       const webSocketPair = new WebSocketPair();
       const [client, server] = Object.values(webSocketPair);
       server.accept();
       
       handleSession(server).catch(() => safeCloseWebSocket(server));
-
       // 修复 spread 类型错误
       const responseInit = {
         status: 101,
@@ -38,7 +35,6 @@ export default {
       if (token) {
         responseInit.headers = { 'Sec-WebSocket-Protocol': token };
       }
-
       return new Response(null, responseInit);
       
     } catch (err) {
@@ -46,11 +42,9 @@ export default {
     }
   },
 };
-
 async function handleSession(webSocket) {
   let remoteSocket, remoteWriter, remoteReader;
   let isClosed = false;
-
   const cleanup = () => {
     if (isClosed) return;
     isClosed = true;
@@ -62,7 +56,6 @@ async function handleSession(webSocket) {
     remoteWriter = remoteReader = remoteSocket = null;
     safeCloseWebSocket(webSocket);
   };
-
   const pumpRemoteToWebSocket = async () => {
     try {
       while (!isClosed && remoteReader) {
@@ -79,7 +72,6 @@ async function handleSession(webSocket) {
       cleanup();
     }
   };
-
   const parseAddress = (addr) => {
     if (addr[0] === '[') {
       const end = addr.indexOf(']');
@@ -94,62 +86,62 @@ async function handleSession(webSocket) {
       port: parseInt(addr.substring(sep + 1), 10)
     };
   };
-
   const isCFError = (err) => {
     const msg = err?.message?.toLowerCase() || '';
     return msg.includes('proxy request') || 
            msg.includes('cannot connect') || 
            msg.includes('cloudflare');
   };
-
   const connectToRemote = async (targetAddr, firstFrameData) => {
     const original = parseAddress(targetAddr);  // 解析原始的 host 和 port
     const attempts = [null, ...CF_FALLBACK_IPS];  // attempts[0] = null 表示用原始
-
     for (let i = 0; i < attempts.length; i++) {
       let attemptHost = original.host;
       let attemptPort = original.port;
-
       if (attempts[i] !== null) {
-        // 对于 fallback 项，尝试解析它（支持 'host:port' 或纯 'host'）
-        try {
-          const parsedFallback = parseAddress(attempts[i]);
-          attemptHost = parsedFallback.host;
-          attemptPort = parsedFallback.port;  // 如果有端口，用 fallback 的端口
-        } catch {
-          // 如果解析失败（无端口），则假设是纯 host，用原始端口
-          attemptHost = attempts[i];
-          attemptPort = original.port;
+        const fallback = attempts[i];
+        if (fallback.includes(':')) {
+          // 如果包含 ':'，假设是 host:port 或 [ipv6]:port，解析它
+          try {
+            const parsedFallback = parseAddress(fallback);
+            if (!isNaN(parsedFallback.port)) {
+              attemptHost = parsedFallback.host;
+              attemptPort = parsedFallback.port;
+            } else {
+              throw new Error('Invalid port');
+            }
+          } catch {
+            // 解析失败，回退到默认
+            attemptHost = fallback;
+            attemptPort = 443;
+          }
+        } else {
+          // 如果不包含 ':'，假设是纯 host，用默认 443 端口
+          attemptHost = fallback;
+          attemptPort = 443;
         }
       }
-
       try {
         remoteSocket = connect({
           hostname: attemptHost,
           port: attemptPort
         });
-
         if (remoteSocket.opened) await remoteSocket.opened;
-
         remoteWriter = remoteSocket.writable.getWriter();
         remoteReader = remoteSocket.readable.getReader();
-
         // 发送首帧数据
         if (firstFrameData) {
           await remoteWriter.write(encoder.encode(firstFrameData));
         }
-
         webSocket.send('CONNECTED');
         pumpRemoteToWebSocket();
         return;
-
       } catch (err) {
         // 清理失败的连接
         try { remoteWriter?.releaseLock(); } catch {}
         try { remoteReader?.releaseLock(); } catch {}
         try { remoteSocket?.close(); } catch {}
         remoteWriter = remoteReader = remoteSocket = null;
-
         // 如果不是 CF 错误或已是最后尝试，抛出错误
         if (!isCFError(err) || i === attempts.length - 1) {
           throw err;
@@ -157,13 +149,10 @@ async function handleSession(webSocket) {
       }
     }
   };
-
   webSocket.addEventListener('message', async (event) => {
     if (isClosed) return;
-
     try {
       const data = event.data;
-
       if (typeof data === 'string') {
         if (data.startsWith('CONNECT:')) {
           const sep = data.indexOf('|', 8);
@@ -189,11 +178,9 @@ async function handleSession(webSocket) {
       cleanup();
     }
   });
-
   webSocket.addEventListener('close', cleanup);
   webSocket.addEventListener('error', cleanup);
 }
-
 function safeCloseWebSocket(ws) {
   try {
     if (ws.readyState === WS_READY_STATE_OPEN || 
